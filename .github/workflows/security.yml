@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - main
+
   pull_request:
     branches:
       - master
@@ -36,13 +37,8 @@ jobs:
       - name: Build Docker image
         run: docker build -t secure-api:${{ github.sha }} .
 
-      - name: Install Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          version: 'latest'
-
-      - name: Scan Docker image
-        uses: aquasecurity/trivy-action@master
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: 'secure-api:${{ github.sha }}'
           format: 'table'

@@ -1,7 +1,16 @@
+## .NET
 bin/
 obj/
-.vs/
 *.user
 *.suo
-.env
-secrets/
+
+## IDE
+.vs/
+.vscode/
+.idea/
+
+## OS
+.DS_Store
+
+## Logs
+*.log

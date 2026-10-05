@@ -43,7 +43,7 @@ El repositorio (`Data/ProveedorStore.cs`) guarda todo en un `ConcurrentDictionar
 - Validación de entrada con Data Annotations en todos los POST/PUT (formato de CUIT, email, largos máximos).
 - **Login sin oráculo de enumeración de usuarios**: el error es genérico *y* el tiempo de respuesta también. Si el usuario no existe, igual se corre PBKDF2 contra un hash señuelo. Sin eso, la diferencia medida era ~1,5 ms contra ~22 ms — suficiente para saber qué usuarios existen aunque el mensaje sea idéntico.
 - **La app no arranca insegura**: fuera de `Development`, si falta `Jwt:Secret` o `Seed:AdminPassword`, el arranque falla con un error explícito en vez de caer en un valor por defecto. Un secreto por defecto en un repo público significa que cualquiera puede firmar tokens de admin.
-- Contenedor Docker corriendo como usuario sin privilegios (no root).
+- Contenedor Docker sobre la imagen *chiseled* de .NET: sin shell ni gestor de paquetes, corriendo como usuario sin privilegios. Escanea con cero CVEs `HIGH`/`CRITICAL`, así el gate de Trivy puede quedar estricto (`exit-code: 1`) sin ignorar hallazgos.
 
 ## 🗂️ Endpoints
 

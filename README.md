@@ -126,7 +126,13 @@ Si omitís alguna de las dos variables el contenedor arranca y falla a propósit
 ## 🔧 CI/CD
 
 - `.github/workflows/ci.yml` — `restore`, `build` y `test` de `SecureApi.sln` en cada push/PR, y valida que la imagen Docker compile.
-- `.github/workflows/security.yml` — lo mismo más dos escaneos: **Gitleaks** sobre el historial (secretos commiteados) y **Trivy** sobre la imagen (CVEs `HIGH`/`CRITICAL`, con `exit-code: 1` para que el pipeline corte).
+- `.github/workflows/security.yml` — lo mismo más dos escaneos: **Gitleaks** sobre el historial completo (secretos commiteados) y **Trivy** sobre la imagen (CVEs `HIGH`/`CRITICAL`, con `exit-code: 1` para que el pipeline corte).
+
+Gitleaks corre con la versión fijada (`8.30.1`) y el checksum verificado, en lugar de `gitleaks-action@v2`: el action trae un binario con un ruleset viejo que marcaba como filtración los valores de desarrollo que están commiteados a propósito. Fijar la versión deja el escaneo limpio sin suprimir hallazgos, y permite reproducir en local exactamente lo que corre en CI:
+
+```bash
+gitleaks detect --source . --config .gitleaks.toml --redact
+```
 
 Los dos declaran `permissions: contents: read` y construyen explícitamente `SecureApi/Dockerfile`, para que Trivy escanee la imagen de la API y no otra.
 

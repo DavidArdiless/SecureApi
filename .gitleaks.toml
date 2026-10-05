@@ -1,13 +1,19 @@
 title = "SecureApi"
 
-# Extiende las reglas por defecto de Gitleaks y permite únicamente los
-# valores de desarrollo y de test que están commiteados a propósito.
+# Extiende las reglas por defecto de Gitleaks y declara los valores de
+# desarrollo y de test que están commiteados a propósito.
 #
 # Por qué están commiteados: para que cualquiera pueda clonar el repo y
 # correrlo sin configurar nada. No son secretos: fuera del entorno
 # Development la app se niega a arrancar con ellos y exige las variables
 # SecureApi__Jwt__Secret y SecureApi__Seed__AdminPassword
 # (ver SecureApi/Program.cs y SecureApi/Data/UsuarioStore.cs).
+#
+# Con la versión de Gitleaks que fija el workflow (8.30.1) estas entradas no
+# suprimen ningún hallazgo: el repo escanea limpio sin ellas. Están igual por
+# dos razones: dejan por escrito cuáles son los valores públicos a propósito,
+# y evitan que un cambio futuro en el ruleset los empiece a marcar y rompa el
+# pipeline sin que haya un secreto real.
 #
 # El allowlist es por VALOR EXACTO, no por archivo ni por regla: un secreto
 # nuevo en estos mismos archivos sigue haciendo fallar el pipeline, que es

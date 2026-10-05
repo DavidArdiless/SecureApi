@@ -22,11 +22,33 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Historia completa: un secreto borrado en un commit posterior sigue
+          # estando filtrado, así que el escaneo tiene que ver todos los commits.
+          fetch-depth: 0
 
-      - name: Secret Scan
-        uses: gitleaks/gitleaks-action@v2
+      # Se fija la versión del escáner en lugar de usar gitleaks-action@v2.
+      # El action trae un binario con un ruleset viejo y mucho más ruidoso, que
+      # marcaba como filtración los valores de desarrollo commiteados a
+      # propósito. Con la versión fijada el repo escanea limpio sin suprimir
+      # nada, y la misma versión se puede correr local para reproducir el
+      # resultado exacto:
+      #   gitleaks detect --source . --config .gitleaks.toml --redact
+      - name: Secret Scan (gitleaks)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          DIR="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$DIR"
+          curl -sSfL -o "$DIR/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "$GITLEAKS_SHA256  $DIR/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$DIR/gitleaks.tar.gz" -C "$DIR" gitleaks
+          "$DIR/gitleaks" version
+          "$DIR/gitleaks" detect --source . --config .gitleaks.toml \
+            --redact --no-banner --verbose --exit-code 1
 
       # La solución apunta a net8.0. Instalar solo el SDK 10 hace que
       # `dotnet test` no encuentre el runtime 8 y el job falle.

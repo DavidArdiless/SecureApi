@@ -35,10 +35,20 @@ public class JwtServiceTests
         var jwt = CrearServicio();
         string token = jwt.GenerateToken(1, "admin", "Admin");
 
-        // Le cambio el último caracter de la firma a propósito.
-        char ultimo = token[^1];
-        char reemplazo = ultimo == 'a' ? 'b' : 'a';
-        string tokenAlterado = token[..^1] + reemplazo;
+        // Se altera un BYTE de la firma, no un caracter de su representación.
+        //
+        // Cambiar el último caracter del token no sirve: un HMAC-SHA256 son 32
+        // bytes, que en Base64Url ocupan 43 caracteres (43 x 6 = 258 bits para
+        // 256 bits de datos). El último caracter carga solo 4 bits
+        // significativos y 2 de relleno, así que varios caracteres distintos
+        // decodifican a los mismos 32 bytes: la firma seguiría siendo válida y
+        // el test fallaría de forma intermitente según en qué caracter termine
+        // la firma de cada corrida.
+        var partes = token.Split('.');
+        byte[] firma = Base64UrlDecode(partes[2]);
+        firma[0] ^= 0xFF;
+
+        string tokenAlterado = $"{partes[0]}.{partes[1]}.{Base64Url(firma)}";
 
         Assert.Null(jwt.ValidateToken(tokenAlterado));
     }
@@ -172,4 +182,15 @@ public class JwtServiceTests
 
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static byte[] Base64UrlDecode(string input)
+    {
+        string padded = input.Replace('-', '+').Replace('_', '/');
+        switch (padded.Length % 4)
+        {
+            case 2: padded += "=="; break;
+            case 3: padded += "="; break;
+        }
+        return Convert.FromBase64String(padded);
+    }
 }

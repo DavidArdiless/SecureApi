@@ -42,11 +42,11 @@ public class ProveedorStoreTests
     }
 
     [Fact]
-    public void Actualizar_ConIdExistente_PisaLosDatosYDevuelveTrue()
+    public void Actualizar_ConIdExistente_PisaLosCamposEditables()
     {
         var store = new ProveedorStore();
 
-        bool actualizado = store.Actualizar(1, new Proveedor
+        var actualizado = store.Actualizar(1, new Proveedor
         {
             RazonSocial = "Nombre Actualizado SRL",
             Cuit = "30-99999999-9",
@@ -54,18 +54,45 @@ public class ProveedorStoreTests
             Rubro = "Otro rubro",
         });
 
-        Assert.True(actualizado);
+        Assert.NotNull(actualizado);
+        Assert.Equal(1, actualizado!.Id);
         Assert.Equal("Nombre Actualizado SRL", store.ObtenerPorId(1)!.RazonSocial);
     }
 
     [Fact]
-    public void Actualizar_ConIdInexistente_DevuelveFalse()
+    public void Actualizar_PreservaFechaAltaYEstado()
+    {
+        var store = new ProveedorStore();
+        var original = store.ObtenerPorId(1)!;
+        DateTime fechaAltaOriginal = original.FechaAlta;
+
+        // Un proveedor dado de baja no tiene que revivir por un PUT que solo
+        // corrige el teléfono.
+        original.Activo = false;
+
+        var actualizado = store.Actualizar(1, new Proveedor
+        {
+            RazonSocial = original.RazonSocial,
+            Cuit = original.Cuit,
+            Email = original.Email,
+            Telefono = "381-4000000",
+            Rubro = original.Rubro,
+        });
+
+        Assert.NotNull(actualizado);
+        Assert.Equal(fechaAltaOriginal, actualizado!.FechaAlta);
+        Assert.False(actualizado.Activo);
+        Assert.Equal("381-4000000", actualizado.Telefono);
+    }
+
+    [Fact]
+    public void Actualizar_ConIdInexistente_DevuelveNull()
     {
         var store = new ProveedorStore();
 
-        bool actualizado = store.Actualizar(999, new Proveedor { RazonSocial = "X", Cuit = "X", Email = "x@x.com", Rubro = "X" });
+        var actualizado = store.Actualizar(999, new Proveedor { RazonSocial = "X", Cuit = "X", Email = "x@x.com", Rubro = "X" });
 
-        Assert.False(actualizado);
+        Assert.Null(actualizado);
     }
 
     [Fact]

@@ -1,8 +1,0 @@
-bin/
-obj/
-.vs/
-.git/
-.gitignore
-*.user
-*.suo
-README.md

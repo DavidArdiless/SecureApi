@@ -50,13 +50,25 @@ public class ProveedorStore
         return proveedor;
     }
 
-    public bool Actualizar(int id, Proveedor datosActualizados)
+    /// <summary>
+    /// Actualiza los campos editables y devuelve el proveedor tal como quedó
+    /// guardado, o null si el id no existe.
+    ///
+    /// Preserva a propósito Id, FechaAlta y Activo: no viajan en el request de
+    /// actualización, así que pisarlos con los valores por defecto de un
+    /// Proveedor nuevo haría que un PUT para corregir un teléfono también
+    /// reseteara la fecha de alta y reactivara a un proveedor dado de baja.
+    /// </summary>
+    public Proveedor? Actualizar(int id, Proveedor datosActualizados)
     {
-        if (!_proveedores.ContainsKey(id)) return false;
+        if (!_proveedores.TryGetValue(id, out var existente)) return null;
 
         datosActualizados.Id = id;
+        datosActualizados.FechaAlta = existente.FechaAlta;
+        datosActualizados.Activo = existente.Activo;
+
         _proveedores[id] = datosActualizados;
-        return true;
+        return datosActualizados;
     }
 
     public bool Eliminar(int id) => _proveedores.TryRemove(id, out _);

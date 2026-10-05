@@ -8,16 +8,35 @@ using SecureApi.Validation;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Configuración de JWT ---
-// El secreto NUNCA debería vivir en appsettings.json en un repo real.
-// Acá se lee de configuración para que en desarrollo funcione con un
-// valor por default, pero en producción se espera la variable de
-// entorno SecureApi__Jwt__Secret (ver README y appsettings.json).
-string jwtSecret = builder.Configuration["Jwt:Secret"]
-    ?? "dev-only-secret-cambiar-en-produccion-minimo-32-caracteres";
-string jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "SecureApi";
+// --- Variables de entorno con prefijo ---
+// El README documenta las variables como SecureApi__Jwt__Secret y
+// SecureApi__Seed__AdminPassword. El provider de entorno que registra
+// CreateBuilder NO usa prefijo, así que sin esta línea esas variables se
+// ignoran en silencio y la app se queda con los valores de desarrollo.
+// Registrarlo último también le da prioridad sobre los appsettings.
+builder.Configuration.AddEnvironmentVariables(prefix: "SecureApi__");
 
-builder.Services.AddSingleton(new JwtService(jwtSecret, jwtIssuer, TimeSpan.FromHours(2)));
+// --- Configuración de JWT ---
+// El secreto no vive en el repo. En Development se toma de
+// appsettings.Development.json; fuera de Development es obligatorio y, si
+// falta, la app NO arranca. Arrancar con un secreto público sería peor que
+// no arrancar: cualquiera podría firmar tokens de admin.
+bool esDesarrollo = builder.Environment.IsDevelopment();
+
+string? jwtSecretConfigurado = builder.Configuration["Jwt:Secret"];
+if (string.IsNullOrWhiteSpace(jwtSecretConfigurado) && !esDesarrollo)
+{
+    throw new InvalidOperationException(
+        "Falta el secreto JWT. Configurá SecureApi__Jwt__Secret (o Jwt__Secret) " +
+        "con al menos 32 caracteres. La API no arranca con el secreto de " +
+        "desarrollo fuera del entorno Development.");
+}
+
+string jwtSecret = jwtSecretConfigurado ?? "dev-only-secret-cambiar-en-produccion-minimo-32-caracteres";
+string jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "SecureApi";
+var jwtLifetime = TimeSpan.FromHours(2);
+
+builder.Services.AddSingleton(new JwtService(jwtSecret, jwtIssuer, jwtLifetime));
 builder.Services.AddSingleton<ProveedorStore>();
 builder.Services.AddSingleton<UsuarioStore>();
 
@@ -25,6 +44,10 @@ builder.Services.AddSingleton<UsuarioStore>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Nota: la partición es por IP de la conexión. Detrás de un proxy o load
+    // balancer hay que sumar UseForwardedHeaders, o todos los clientes caen
+    // en la misma partición y se bloquean entre ellos.
 
     // Límite general para toda la API.
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
@@ -64,17 +87,19 @@ app.MapPost("/api/auth/login", (LoginRequest request, UsuarioStore usuarios, Jwt
 {
     var usuario = usuarios.BuscarPorUsuario(request.NombreUsuario);
 
-    if (usuario is null || !PasswordHasher.VerifyPassword(request.Password, usuario.PasswordHash, usuario.PasswordSalt))
+    // VerificarPassword corre PBKDF2 incluso si el usuario no existe, para
+    // que el tiempo de respuesta no delate qué usuarios son válidos.
+    if (!usuarios.VerificarPassword(usuario, request.Password))
     {
         // Mensaje deliberadamente genérico: no revela si falló el usuario o la contraseña.
         return Results.Unauthorized();
     }
 
-    string token = jwt.GenerateToken(usuario.Id, usuario.NombreUsuario, usuario.Rol);
+    string token = jwt.GenerateToken(usuario!.Id, usuario.NombreUsuario, usuario.Rol);
     return Results.Ok(new LoginResponse
     {
         Token = token,
-        ExpiraUtc = DateTime.UtcNow.AddHours(2),
+        ExpiraUtc = DateTime.UtcNow.Add(jwtLifetime),
     });
 })
 .WithValidation<LoginRequest>()
@@ -115,16 +140,18 @@ proveedores.MapPost("/", (ProveedorRequest request, ProveedorStore store) =>
 
 proveedores.MapPut("/{id:int}", (int id, ProveedorRequest request, ProveedorStore store) =>
 {
-    var actualizado = new Proveedor
+    var actualizado = store.Actualizar(id, new Proveedor
     {
         RazonSocial = request.RazonSocial,
         Cuit = request.Cuit,
         Email = request.Email,
         Telefono = request.Telefono,
         Rubro = request.Rubro,
-    };
+    });
 
-    return store.Actualizar(id, actualizado) ? Results.Ok(MapToResponse(actualizado)) : Results.NotFound();
+    // Se devuelve lo que quedó guardado, no lo que mandó el cliente: el
+    // store preserva FechaAlta y Activo, que no viajan en el request.
+    return actualizado is null ? Results.NotFound() : Results.Ok(MapToResponse(actualizado));
 })
 .WithValidation<ProveedorRequest>()
 .WithName("ActualizarProveedor");

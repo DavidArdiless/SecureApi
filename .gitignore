@@ -14,3 +14,6 @@ obj/
 
 ## Logs
 *.log
+
+## Restos del template viejo, movidos acá para revisar antes de borrarlos
+_to_delete/

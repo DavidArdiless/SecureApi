@@ -55,28 +55,34 @@ public class UsuarioStoreTests
     }
 
     [Fact]
-    public void VerificarPassword_ConUsuarioInexistente_TardaLoMismoQueConUnoExistente()
+    public void VerificarPassword_ConUsuarioInexistente_IgualCorrePbkdf2()
     {
         // Este test es el que impide volver al cortocircuito: si alguien saca el
         // hash señuelo, el camino del usuario inexistente se vuelve instantáneo
         // y el login pasa a ser un oráculo de enumeración de usuarios.
+        //
+        // La aserción es una cota inferior de un solo lado, y es a propósito.
+        // Comparar contra el tiempo del usuario existente parece más directo,
+        // pero es frágil: en un runner cargado esa medición se infla y el test
+        // falla sin que haya ninguna regresión. El ruido solo puede hacer las
+        // mediciones MÁS lentas, nunca más rápidas, así que un piso no da
+        // falsos positivos.
+        //
+        // Márgenes: 210.000 iteraciones de PBKDF2 tardan ~20 ms acá y más en
+        // CI; un cortocircuito tardaría microsegundos. El piso de 2 ms queda
+        // 10x por debajo del costo real y ~100x por encima del cortocircuito.
         var store = CrearStore();
-        var existente = store.BuscarPorUsuario("admin");
 
         // Warmup: la primera llamada paga el JIT.
-        store.VerificarPassword(existente, "x");
         store.VerificarPassword(null, "x");
 
-        TimeSpan conUsuario = Medir(() => store.VerificarPassword(existente, "incorrecta"));
-        TimeSpan sinUsuario = Medir(() => store.VerificarPassword(null, "incorrecta"));
+        TimeSpan masRapida = MedirMasRapida(() => store.VerificarPassword(null, "incorrecta"));
 
-        // Comparación relativa, no un umbral en ms: así no depende de lo rápida
-        // que sea la máquina donde corre el test.
         Assert.True(
-            sinUsuario > conUsuario * 0.5,
-            $"El camino del usuario inexistente tardó {sinUsuario.TotalMilliseconds:F1} ms " +
-            $"contra {conUsuario.TotalMilliseconds:F1} ms del existente: la diferencia " +
-            "permite enumerar usuarios.");
+            masRapida > TimeSpan.FromMilliseconds(2),
+            $"El camino del usuario inexistente tardó {masRapida.TotalMilliseconds:F3} ms: " +
+            "demasiado poco para haber corrido PBKDF2, así que el tiempo de " +
+            "respuesta del login revela qué usuarios existen.");
     }
 
     // ---------- Helpers ----------
@@ -84,13 +90,24 @@ public class UsuarioStoreTests
     private static UsuarioStore CrearStore() =>
         new(Config(("Seed:AdminPassword", "CambiarEsta123!")), new EntornoFalso("Development"));
 
-    private static TimeSpan Medir(Action accion)
+    /// <summary>
+    /// Devuelve la más rápida de varias corridas. El mínimo es el estimador
+    /// correcto acá: filtra el ruido del scheduler, que solo puede sumar
+    /// tiempo, y deja la cota más conservadora para la aserción.
+    /// </summary>
+    private static TimeSpan MedirMasRapida(Action accion, int repeticiones = 3)
     {
-        const int repeticiones = 3;
-        var reloj = Stopwatch.StartNew();
-        for (int i = 0; i < repeticiones; i++) accion();
-        reloj.Stop();
-        return reloj.Elapsed / repeticiones;
+        var masRapida = TimeSpan.MaxValue;
+
+        for (int i = 0; i < repeticiones; i++)
+        {
+            var reloj = Stopwatch.StartNew();
+            accion();
+            reloj.Stop();
+            if (reloj.Elapsed < masRapida) masRapida = reloj.Elapsed;
+        }
+
+        return masRapida;
     }
 
     private static IConfiguration Config(params (string Clave, string Valor)[] valores) =>

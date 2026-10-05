@@ -1,0 +1,44 @@
+title = "SecureApi"
+
+# Extiende las reglas por defecto de Gitleaks y permite únicamente los
+# valores de desarrollo y de test que están commiteados a propósito.
+#
+# Por qué están commiteados: para que cualquiera pueda clonar el repo y
+# correrlo sin configurar nada. No son secretos: fuera del entorno
+# Development la app se niega a arrancar con ellos y exige las variables
+# SecureApi__Jwt__Secret y SecureApi__Seed__AdminPassword
+# (ver SecureApi/Program.cs y SecureApi/Data/UsuarioStore.cs).
+#
+# El allowlist es por VALOR EXACTO, no por archivo ni por regla: un secreto
+# nuevo en estos mismos archivos sigue haciendo fallar el pipeline, que es
+# justamente el punto de tener el escaneo. Tampoco se usa `paths` junto con
+# `regexes` en un mismo bloque, porque según la versión de Gitleaks esas
+# condiciones se combinan con OR y eso allowlistearía carpetas completas.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Secreto y contraseña del entorno Development"
+regexTarget = "match"
+regexes = [
+  '''dev-only-secret-cambiar-en-produccion-minimo-32-caracteres''',
+  '''CambiarEsta123!''',
+]
+
+[[allowlists]]
+description = "Valores usados por la suite de tests"
+regexTarget = "match"
+regexes = [
+  '''clave-secreta-de-pruebas-minimo-32-caracteres!!''',
+  '''MiPassword123!''',
+  '''una-contrasena-de-produccion''',
+]
+
+[[allowlists]]
+description = "Placeholders de los ejemplos del README"
+regexTarget = "match"
+regexes = [
+  '''una-clave-de-al-menos-32-caracteres''',
+  '''una-contrasena-de-admin''',
+]
